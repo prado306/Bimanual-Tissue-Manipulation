@@ -15,6 +15,7 @@ from sofa_env.sofa_templates.camera import Camera
 
 from sofa_env.utils.camera import world_to_pixel_coordinates
 
+import matplotlib.pyplot as plt
 # import cvxpy as cp
 # from scipy.optimize import minimize
 
@@ -656,15 +657,17 @@ class BimanualTissueManipulationEnv(SofaEnv):
                 marker_positions.append(self.rng.uniform(marker_range["low"], marker_range["high"]))
         else:
             # TODO generalize to N markers
-            start = (0.25, 0.25)
-            end = (0.75,0.75)
+            start = (0.4, 0.4)
+            end = (0.5, 0.5)
             interval = 0.05
 
             x_points = np.arange(start[0], end[0] + interval, interval)
             y_points = np.arange(start[1], end[1] + interval, interval)
             
             marker_positions = [(x, y) for x in x_points for y in y_points]
-            # marker_positions = [(0.6, 0.5), (0.75, 0.75), (0.5, 0.5), (0.6, 0.6)]
+            # print(len(marker_positions))
+            # marker_positions = [(0.6, 0.5), (0.75, 0.75)]
+            print(marker_positions)
 
         if self.render_markers_with_ogl:
             marker_colors = None
@@ -694,16 +697,23 @@ class BimanualTissueManipulationEnv(SofaEnv):
                     relative_target_positions.append(self.rng.uniform(target_range["low"], target_range["high"]))
             else:
                 # TODO generalize to N targets
-                start = (0.3, 0.3)
-                end = (0.8,0.8)
-                interval = 0.05
+                # start = (0.4, 0.4)
+                # end = (0.5, 0.5)
+                # interval = 0.05
 
-                x_points = np.arange(start[0], end[0] + interval, interval)
-                y_points = np.arange(start[1], end[1] + interval, interval)
+                # x_points = np.arange(start[0], end[0] + interval, interval)
+                # y_points = np.arange(start[1], end[1] + interval, interval)
                 
-                relative_target_positions = [(x, y) for x in x_points for y in y_points]
+                relative_target_positions = np.load('/home/shan/Desktop/prad/Envs/sofa_env/sofa_env/scenes/bimanual_tissue_manipulation/targets.npy')
+                paired_list = list(zip(relative_target_positions[::2], relative_target_positions[1::2]))
+                relative_target_positions = paired_list
+
+                # relative_target_positions = [(x, y) for x in x_points for y in y_points]
+
+                # relative_target_positions = [(0.7, 0.65), (0.85, 0.85)]
 
             target_positions = np.zeros((len(relative_target_positions), 3))
+            print(target_positions.shape)
             for i, position in enumerate(relative_target_positions):
                 target_positions[i, :2] = self.tissue.relative_to_absolute_position(position)
 
@@ -751,16 +761,17 @@ if __name__ == "__main__":
     done = False
     counter = 0
     fps_list = deque(maxlen=100)
-    
-    while True:
+    f=1
+    while f:
+        f =0
         # jac = np.array([[0.6, 0.7, 0.8, 0.9, 0.8, 0.7, 0.6, 0.5],
-                        # [0.7, 0.8, 0.9, 1.0, 0.9, 0.8, 0.7, 0.6]])
+                        # [0.8, 0.68, 0.79, 1.04, 0.95, 0.84, 0.76, 0.36]])
                         # [0.8, 0.9, 1.0, 1.1],
                         # [0.9, 1.0, 1.1, 1.2]])
         # jac = np.array([[0.25, -0.25, 0.1, -0.25],
                         # [1.0, -0.75, 0.1, -1.0]])
-        jac = np.random.rand(242,8)
-        # jac = (np.ones((2,4)))
+        jac = (0.45 * np.ones((16*2,8)) + np.random.rand(16*2,8)/10.0)
+        # jac = (np.ones((242,8)))/2.0
         # jac = np.array([0.5, 0.6, 0.7, 0.8])
         # jac = np.ones((2,4))
         # jac = np.ones((4,8))/10.0
@@ -774,97 +785,118 @@ if __name__ == "__main__":
         ac = np.zeros(8)
         dX_prev = np.zeros(8)
         dX_step = np.zeros(8)
-        alpha = 0.8
+        alpha = 0.4
         # print(jac)
-        for i in range(3000):
+        Errors = np.array([])
+        index = np.array([])
+        
+        # init_errors = np.empty((4, 0))
+        # obs, done, terminated, truncated, info = env.step(ac)
+
+        # num_points = int((obs.shape[0] - 8) / 4)
+        
+        # initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
+
+        # for j in range(8):
+        #     ac[:] = 0.0
+        #     ac[j] = 0.1
+        #     obs, done, terminated, truncated, info = env.step(ac)
+                 
+        #     markedPoints = obs[8 + 2 * num_points:].reshape((-1, 1))  
+            
+        #     dZ = (markedPoints - initialPoints).reshape(-1, 1) 
+        #     print(dZ)            
+        #     init_errors = np.hstack((init_errors, dZ))
+
+        #     # ac[j] = 0.0
+        #     # obs, done, terminated, truncated, info = env.step(ac)
+
+        #     initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
+            # print(obs)
+
+            # ac[j] += 1.0
+
+        # print(init_errors.shape)
+
+        # jac = 10 * init_errors
+
+        for i in range(10000):
             print(f"Iter number" + str(i))
             
-
+            ### Apply action and get new observation  ###
+            
             start = time.perf_counter()
             mine = env.action_space.sample()
             obs, done, terminated, truncated, info = env.step(ac)
-            print(obs[:8])
-            targetPoints = obs[8:250].reshape((-1,1))
-            markedPoints = obs[250:].reshape((-1,1))
-            # print(obs)
-
-
+            num_points = int((obs.shape[0] - 8)/4)
+            targetPoints = obs[8:8 + 2*num_points].reshape((-1,1))
+            markedPoints = obs[8 + 2*num_points:].reshape((-1,1))
+            
+            # print(obs.shape)
             dZ = -markedPoints + targetPoints
             dZ_one = dZ[:,:]
             print(np.linalg.norm(dZ_one))
             
+            Errors = np.append(Errors, np.linalg.norm(dZ_one))
+            index = np.append(index, i)
+            ### Upfate jacobian
+            alpha = 0.4
+            dX_step += 1e-9
             if i!=0:
-                jac = np.clip(jac + alpha * ((dZ_one - jac @ dX_step)/(dX_step.T @ dX_step + 1e-3))@(dX_step.T), -1000.0, 1000.0)
+                jac = np.clip(jac + alpha * ((dZ_one - jac @ dX_step)/(dX_step.T @ dX_step))@(dX_step.T), -1e5, 1e5)
+            print(np.max(jac))
             # print(obs)
-            # lower_angle = -50.0 * np.ones(4)
-            # upper_angle = 50.0 * np.ones(4)
-            # def objective(x):
-            #     return np.linalg.norm(dZ_one - jac@(x.reshape((4,1))))
-            # def lower_limit_constraint(x):
-            #     # print((dX_prev + x - lower_angle).shape)              
-            #     return dX_prev + x/100.0 - lower_angle
-            
-            # def upper_limit_constraint(x):
-            #     # print((upper_angle - (dX_prev + x)).shape)
-            #     return upper_angle - (dX_prev + x/100.0)
-            
-            
-            # lower_bounds = -50 * np.ones(4)
-            # upper_bounds = 50 * np.ones(4)
 
-            # bounds = list(zip(lower_bounds, upper_bounds))
-
-            # dX_step = np.zeros(4)
-
-            # constraints = [{'type': 'ineq', 'fun': lower_limit_constraint},
-            #                 {'type': 'ineq', 'fun': upper_limit_constraint}]
-
-            # init_guess = np.zeros(4)
-            # result = minimize(objective, init_guess, bounds=bounds, constraints=constraints)
-
-            # dX_step = result.x.reshape((4,1))
-            # print(dX_step)
-            # print(jac@dX_step - dZ_one)
-            # print(f"shape is {dZ_one.shape}")
+            ### Get new input ###
             dX_step = np.linalg.pinv(jac) @ dZ_one
-            # print(dX_step.shape)
-            alpha = 0.8
+            # print(dX_step)
             
-            if i == 2999 or np.linalg.norm(dZ_one)<1:
+            
+            if i == 9999 or np.linalg.norm(dZ_one)<0.1:
+            # if i == 29:
                 print("done-----------------------------------------")
-                # print(obs)
-                # print(jac)
-                # print(dZ_one)
-                newTargets = findRelativeCoord(obs[250:])
-                print(newTargets)
+                print(obs)
+                # newTargets = findRelativeCoord(obs[8 + 2*num_points:])
+                # np.save('targets.npy', newTargets)
+                # print(newTargets)
                 i = 0
+                break
                 env.reset()
                 counter = 0
-                # break
-            
-            dX_step = np.clip(dX_step.reshape(-1), -0.03, 0.03)
-            ac = np.zeros(8)
+                
 
-            dX_step[dX_step + dX_prev>=10.0] -= 0.03
-            dX_step[dX_step + dX_prev<=-10.0] += 0.03
-            # ac[4:] = (dX_step.reshape(-1))/100.0
-            # print(ac)
-            # ac[4:] = np.clip(dX_step.reshape(-1), -0.004, 0.004)
-            ac = dX_step.reshape(-1)
-            ac = np.clip(ac, -0.03, 0.03)
-            done = terminated or truncated
-            # print(jac)
-            counter += 1
-            end = time.perf_counter()
-            fps = 1 / (end - start)
-            fps_list.append(fps)
-            # print(f"FPS Mean: {np.mean(fps_list):.5f}    STD: {np.std(fps_list):.5f}")
-            # print(f"Frame"+ str(_))
-            # print(dX_prev.shape)
-            dX_prev = dX_prev + ac.reshape(-1)
-            dX_step = dX_step.reshape((-1,1))
-            # print(dX_prev.shape)
-            # ac[:4] = 0
-            # ac = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+            # dX_hold = dX_step
+            print(dX_step)
+            dX_step = np.clip(dX_step.reshape(-1), -0.1, 0.1)
+            # dX_step = (dX_step/10.0).reshape(-1)
+
+
+            ac = np.zeros(8)
             
+            dX_step = dX_step.reshape(-1)
+            arr1 = (dX_step + dX_prev)>=10.0
+            arr2 = (dX_step + dX_prev)<=-10.0
+            dX_step[arr1] = (10.0 - dX_prev[arr1])
+            dX_step[arr2] = (-10.0 - dX_prev[arr2])
+            
+            ac = dX_step.reshape(-1)
+            
+            print(ac)
+            # print(dX_hold)
+            counter += 1
+            
+            dX_prev = dX_prev + ac.reshape(-1)
+
+            dX_step = ac
+            dX_step = dX_step.reshape((-1,1))
+            
+            # ac = np.array([7.0, 3.41, -9.09, 6.06, -7.14, 1.1, 9.09, 5.1])/30.0
+        plt.figure(figsize=(10, 5))
+        plt.plot(index, Errors, label='Error', color='blue')
+        plt.title('Plot')
+        plt.xlabel('x values')
+        plt.ylabel('y values')
+        plt.legend()
+        plt.grid()
+        plt.show()
         env.reset()
