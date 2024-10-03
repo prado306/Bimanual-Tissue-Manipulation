@@ -657,9 +657,9 @@ class BimanualTissueManipulationEnv(SofaEnv):
                 marker_positions.append(self.rng.uniform(marker_range["low"], marker_range["high"]))
         else:
             # TODO generalize to N markers
-            start = (0.4, 0.4)
-            end = (0.5, 0.5)
-            interval = 0.05
+            start = (0.2, 0.2)
+            end = (0.8, 0.8)
+            interval = 0.1
 
             x_points = np.arange(start[0], end[0] + interval, interval)
             y_points = np.arange(start[1], end[1] + interval, interval)
@@ -667,7 +667,7 @@ class BimanualTissueManipulationEnv(SofaEnv):
             marker_positions = [(x, y) for x in x_points for y in y_points]
             # print(len(marker_positions))
             # marker_positions = [(0.6, 0.5), (0.75, 0.75)]
-            print(marker_positions)
+            # print(marker_positions)
 
         if self.render_markers_with_ogl:
             marker_colors = None
@@ -697,9 +697,9 @@ class BimanualTissueManipulationEnv(SofaEnv):
                     relative_target_positions.append(self.rng.uniform(target_range["low"], target_range["high"]))
             else:
                 # TODO generalize to N targets
-                # start = (0.4, 0.4)
-                # end = (0.5, 0.5)
-                # interval = 0.05
+                # start = (0.2, 0.2)
+                # end = (0.8, 0.8)
+                # interval = 0.1
 
                 # x_points = np.arange(start[0], end[0] + interval, interval)
                 # y_points = np.arange(start[1], end[1] + interval, interval)
@@ -763,14 +763,14 @@ if __name__ == "__main__":
     fps_list = deque(maxlen=100)
     f=1
     while f:
-        f =0
+        # f =0
         # jac = np.array([[0.6, 0.7, 0.8, 0.9, 0.8, 0.7, 0.6, 0.5],
                         # [0.8, 0.68, 0.79, 1.04, 0.95, 0.84, 0.76, 0.36]])
                         # [0.8, 0.9, 1.0, 1.1],
                         # [0.9, 1.0, 1.1, 1.2]])
         # jac = np.array([[0.25, -0.25, 0.1, -0.25],
                         # [1.0, -0.75, 0.1, -1.0]])
-        jac = (0.45 * np.ones((16*2,8)) + np.random.rand(16*2,8)/10.0)
+        # jac = (0.45 * np.ones((49*2,8)) + np.random.rand(49*2,8)/10.0)
         # jac = (np.ones((242,8)))/2.0
         # jac = np.array([0.5, 0.6, 0.7, 0.8])
         # jac = np.ones((2,4))
@@ -789,38 +789,49 @@ if __name__ == "__main__":
         # print(jac)
         Errors = np.array([])
         index = np.array([])
-        
-        # init_errors = np.empty((4, 0))
-        # obs, done, terminated, truncated, info = env.step(ac)
+        mym = np.array([])
 
-        # num_points = int((obs.shape[0] - 8) / 4)
-        
-        # initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
+        init_errors = np.empty((49*2, 0))
+        obs, done, terminated, truncated, info = env.step(ac)
 
-        # for j in range(8):
-        #     ac[:] = 0.0
-        #     ac[j] = 0.1
-        #     obs, done, terminated, truncated, info = env.step(ac)
+        num_points = int((obs.shape[0] - 8) / 4)
+        
+        initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
+        action_total = []
+        for j in range(2000):
+            # ac[:] = 0.0
+            # ac[j] = 0.1
+            ac = (np.random.rand(8) - 0.5)/10.0
+            # print(ac)
+
+            action_total.append(ac.reshape((8,1)))
+            obs, done, terminated, truncated, info = env.step(ac)
                  
-        #     markedPoints = obs[8 + 2 * num_points:].reshape((-1, 1))  
+            markedPoints = obs[8 + 2 * num_points:].reshape((-1, 1))  
             
-        #     dZ = (markedPoints - initialPoints).reshape(-1, 1) 
-        #     print(dZ)            
-        #     init_errors = np.hstack((init_errors, dZ))
+            dZ = (markedPoints - initialPoints).reshape(-1, 1) 
+            # print(dZ)            
+            init_errors = np.hstack((init_errors, dZ))
 
-        #     # ac[j] = 0.0
-        #     # obs, done, terminated, truncated, info = env.step(ac)
+            # ac[j] = 0.0
+            # obs, done, terminated, truncated, info = env.step(ac)
 
-        #     initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
+            initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
             # print(obs)
-
+            if j%200==0:
+                print(f"{int(j/2000 * 100)}% ")
             # ac[j] += 1.0
 
-        # print(init_errors.shape)
+        action_total_stacked = np.hstack(action_total)
 
+        print(init_errors.shape)
+        print(action_total_stacked.shape)
+        jac = init_errors @ np.linalg.pinv(action_total_stacked)
+
+        print(jac.shape)
         # jac = 10 * init_errors
 
-        for i in range(10000):
+        for i in range(2000):
             print(f"Iter number" + str(i))
             
             ### Apply action and get new observation  ###
@@ -840,11 +851,13 @@ if __name__ == "__main__":
             Errors = np.append(Errors, np.linalg.norm(dZ_one))
             index = np.append(index, i)
             ### Upfate jacobian
-            alpha = 0.4
+            alpha = 0.0004
             dX_step += 1e-9
+            meann = np.median(jac)
+            print(meann)
+            mym = np.append(mym, meann)
             if i!=0:
                 jac = np.clip(jac + alpha * ((dZ_one - jac @ dX_step)/(dX_step.T @ dX_step))@(dX_step.T), -1e5, 1e5)
-            print(np.max(jac))
             # print(obs)
 
             ### Get new input ###
@@ -852,7 +865,7 @@ if __name__ == "__main__":
             # print(dX_step)
             
             
-            if i == 9999 or np.linalg.norm(dZ_one)<0.1:
+            if i == 1999 or np.linalg.norm(dZ_one)<1.0:
             # if i == 29:
                 print("done-----------------------------------------")
                 print(obs)
@@ -867,7 +880,7 @@ if __name__ == "__main__":
 
             # dX_hold = dX_step
             print(dX_step)
-            dX_step = np.clip(dX_step.reshape(-1), -0.1, 0.1)
+            dX_step = np.clip(dX_step.reshape(-1), -0.04, 0.04)
             # dX_step = (dX_step/10.0).reshape(-1)
 
 
@@ -898,5 +911,16 @@ if __name__ == "__main__":
         plt.ylabel('y values')
         plt.legend()
         plt.grid()
+        # plt.show()
+        
+        plt.figure(figsize=(10, 5))
+        plt.plot(index, mym, label='Error', color='blue')
+        plt.title('Plot')
+        plt.xlabel('x values')
+        plt.ylabel('y values')
+        plt.legend()
+        plt.grid()
         plt.show()
         env.reset()
+        # env.reset()
+
