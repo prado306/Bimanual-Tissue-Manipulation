@@ -12,6 +12,7 @@ from sofa_env.scenes.bimanual_tissue_manipulation.sofa_objects.tissue import Col
 
 from sofa_env.base import SofaEnv, RenderMode, RenderFramework
 from sofa_env.sofa_templates.camera import Camera
+from sklearn.decomposition import PCA
 
 from sofa_env.utils.camera import world_to_pixel_coordinates
 
@@ -667,6 +668,7 @@ class BimanualTissueManipulationEnv(SofaEnv):
             marker_positions = [(x, y) for x in x_points for y in y_points]
             # print(len(marker_positions))
             # marker_positions = [(0.6, 0.5), (0.75, 0.75)]
+            # marker_positions = [(0.6, 0.5)]
             # print(marker_positions)
 
         if self.render_markers_with_ogl:
@@ -711,6 +713,7 @@ class BimanualTissueManipulationEnv(SofaEnv):
                 # relative_target_positions = [(x, y) for x in x_points for y in y_points]
 
                 # relative_target_positions = [(0.7, 0.65), (0.85, 0.85)]
+                # relative_target_positions = [(0.7, 0.65)]
 
             target_positions = np.zeros((len(relative_target_positions), 3))
             print(target_positions.shape)
@@ -785,7 +788,7 @@ if __name__ == "__main__":
         ac = np.zeros(8)
         dX_prev = np.zeros(8)
         dX_step = np.zeros(8)
-        alpha = 0.4
+        alpha = 0.06
         # print(jac)
         Errors = np.array([])
         index = np.array([])
@@ -798,37 +801,40 @@ if __name__ == "__main__":
         
         initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
         action_total = []
-        for j in range(2000):
-            # ac[:] = 0.0
-            # ac[j] = 0.1
-            ac = (np.random.rand(8) - 0.5)/10.0
-            # print(ac)
+        if 1:
+            for j in range(1000):
+                #Loop for initial manipulation to estiamte jacobian
+                
+                ac = (np.random.rand(8) - 0.5)/100.0
+                # print(ac)
 
-            action_total.append(ac.reshape((8,1)))
-            obs, done, terminated, truncated, info = env.step(ac)
-                 
-            markedPoints = obs[8 + 2 * num_points:].reshape((-1, 1))  
-            
-            dZ = (markedPoints - initialPoints).reshape(-1, 1) 
-            # print(dZ)            
-            init_errors = np.hstack((init_errors, dZ))
+                action_total.append(ac.reshape((8,1)))
+                obs, done, terminated, truncated, info = env.step(ac)
+                    
+                markedPoints = obs[8 + 2 * num_points:].reshape((-1, 1))  
+                
+                dZ = (markedPoints - initialPoints).reshape(-1, 1) 
+                # print(dZ)            
+                init_errors = np.hstack((init_errors, dZ))
 
-            # ac[j] = 0.0
-            # obs, done, terminated, truncated, info = env.step(ac)
+                # ac[j] = 0.0
+                # obs, done, terminated, truncated, info = env.step(ac)
 
-            initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
-            # print(obs)
-            if j%200==0:
-                print(f"{int(j/2000 * 100)}% ")
-            # ac[j] += 1.0
+                initialPoints = obs[8 + 2 * num_points:].reshape((-1, 1))
+                # print(obs)
+                if j%200==0:
+                    print(f"{int(j/1000 * 100)}% ")
+                # ac[j] += 1.0
 
-        action_total_stacked = np.hstack(action_total)
+            action_total_stacked = np.hstack(action_total)
 
-        print(init_errors.shape)
-        print(action_total_stacked.shape)
-        jac = init_errors @ np.linalg.pinv(action_total_stacked)
+            print(init_errors.shape)
+            print(action_total_stacked.shape)
+            jac = init_errors @ np.linalg.pinv(action_total_stacked)
 
-        print(jac.shape)
+        # jac = np.eye(2*num_points,8)                                                                              #Uncomment this line to run baseline
+                                                                                                                    #Keep commented for augmented method    
+        print(jac)
         # jac = 10 * init_errors
 
         for i in range(2000):
@@ -851,21 +857,34 @@ if __name__ == "__main__":
             Errors = np.append(Errors, np.linalg.norm(dZ_one))
             index = np.append(index, i)
             ### Upfate jacobian
-            alpha = 0.0004
+            alpha = 0.06
             dX_step += 1e-9
             meann = np.median(jac)
-            print(meann)
+            # print(meann)
             mym = np.append(mym, meann)
             if i!=0:
                 jac = np.clip(jac + alpha * ((dZ_one - jac @ dX_step)/(dX_step.T @ dX_step))@(dX_step.T), -1e5, 1e5)
             # print(obs)
 
             ### Get new input ###
+
+
+            #####ADvanced method using SVD PCA
+
+            # jac_centered = jac - np.mean(jac, axis=0)
+            # pca = PCA(n_components=jac.shape[1])
+            # jac_pca = pca.fit_transform(jac_centered)
+            # top_8_indices = np.argsort(np.abs(jac_pca[:, 0]))[-8:]
+            # jac_reduced = jac[top_8_indices, :]
+            # dZ_reduced = dZ_one[top_8_indices, :]
+
             dX_step = np.linalg.pinv(jac) @ dZ_one
-            # print(dX_step)
+            # print(dX_step.shape)
+            # print(jac.shape)
+            # print(dZ_one.shape)
             
             
-            if i == 1999 or np.linalg.norm(dZ_one)<1.0:
+            if i == 1999 or np.linalg.norm(dZ_one)<7.0:
             # if i == 29:
                 print("done-----------------------------------------")
                 print(obs)
@@ -879,18 +898,18 @@ if __name__ == "__main__":
                 
 
             # dX_hold = dX_step
-            print(dX_step)
-            dX_step = np.clip(dX_step.reshape(-1), -0.04, 0.04)
+            # print(dX_step)
+            dX_step = np.clip(dX_step.reshape(-1), -0.1, 0.1)
             # dX_step = (dX_step/10.0).reshape(-1)
 
 
             ac = np.zeros(8)
             
             dX_step = dX_step.reshape(-1)
-            arr1 = (dX_step + dX_prev)>=10.0
-            arr2 = (dX_step + dX_prev)<=-10.0
-            dX_step[arr1] = (10.0 - dX_prev[arr1])
-            dX_step[arr2] = (-10.0 - dX_prev[arr2])
+            arr1 = (dX_step + dX_prev)>=5.0
+            arr2 = (dX_step + dX_prev)<=-5.0
+            dX_step[arr1] = (5.0 - dX_prev[arr1])
+            dX_step[arr2] = (-5.0 - dX_prev[arr2])
             
             ac = dX_step.reshape(-1)
             
